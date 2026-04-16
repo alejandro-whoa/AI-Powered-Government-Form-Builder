@@ -1,13 +1,17 @@
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useLocation } from 'react-router';
 import { Button } from './gds/Button';
 import { mockExtractedForm } from '../data/mockData';
 import { CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
+import type { FormSchema } from '../types/schema';
 
 export function ExtractionPreview() {
   const navigate = useNavigate();
   const { formId } = useParams();
-  
-  const form = mockExtractedForm;
+  const location = useLocation();
+
+  // Use real extracted data when navigated from UploadPDF, otherwise show mock
+  const form: FormSchema =
+    (location.state as { form?: FormSchema } | null)?.form ?? mockExtractedForm;
   const fieldsNeedingReview = form.fields.filter(f => f.extracted?.needsReview);
   const overallConfidence = form.sourcePDF?.extractionConfidence || 0;
   

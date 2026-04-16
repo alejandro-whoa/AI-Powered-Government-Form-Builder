@@ -18,8 +18,8 @@ export function UploadPDF() {
       if (file.type !== 'application/pdf') {
         setErrors({ ...errors, file: 'The selected file must be a PDF' });
         setSelectedFile(null);
-      } else if (file.size > 10 * 1024 * 1024) {
-        setErrors({ ...errors, file: 'The selected file must be smaller than 10MB' });
+      } else if (file.size > 4 * 1024 * 1024) {
+        setErrors({ ...errors, file: 'The selected file must be smaller than 4MB' });
         setSelectedFile(null);
       } else {
         setSelectedFile(file);
@@ -47,18 +47,45 @@ export function UploadPDF() {
     return Object.keys(newErrors).length === 0;
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
+
+    if (!validateForm() || !selectedFile) {
       return;
     }
-    
-    // Simulate upload and AI extraction
+
     setUploading(true);
-    setTimeout(() => {
-      navigate('/extraction/blue-badge-001');
-    }, 2000);
+    setErrors({});
+
+    try {
+      // Convert the PDF file to a base64 string for the API
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf: base64, title: formTitle, department }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrors({ api: data.error || 'Extraction failed. Please try again.' });
+        setUploading(false);
+        return;
+      }
+
+      navigate(`/extraction/${data.form.id}`, { state: { form: data.form } });
+    } catch {
+      setErrors({ api: 'An unexpected error occurred. Please try again.' });
+      setUploading(false);
+    }
   };
   
   return (
@@ -149,7 +176,7 @@ export function UploadPDF() {
                 Upload PDF file
               </label>
               <div className="text-[#505a5f] mb-1">
-                Maximum file size: 10MB
+                Maximum file size: 4MB
               </div>
               {errors.file && (
                 <p className="text-[#d4351c] font-bold mb-1 flex items-start">

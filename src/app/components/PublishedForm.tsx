@@ -10,6 +10,7 @@ import { Select } from './gds/Select';
 import { mockPublishedForm } from '../data/mockData';
 import { FormField } from '../types/schema';
 import { AlertCircle } from 'lucide-react';
+import { supabase, generateReferenceNumber } from '../../lib/supabase';
 
 export function PublishedForm() {
   const navigate = useNavigate();
@@ -19,6 +20,8 @@ export function PublishedForm() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   
   const currentSection = form.sections[currentSectionIndex];
   const sectionFields = form.fields.filter(f => f.sectionId === currentSection.id);
@@ -80,19 +83,42 @@ export function PublishedForm() {
     return Object.keys(newErrors).length === 0;
   };
   
-  const handleNext = () => {
-    if (validateSection()) {
-      if (currentSectionIndex < form.sections.length - 1) {
-        setCurrentSectionIndex(currentSectionIndex + 1);
-        window.scrollTo(0, 0);
-      } else {
-        // Submit form
-        navigate('/confirmation');
-      }
-    } else {
-      // Scroll to first error
+  const handleNext = async () => {
+    if (!validateSection()) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
     }
+
+    if (currentSectionIndex < form.sections.length - 1) {
+      setCurrentSectionIndex(currentSectionIndex + 1);
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    // Final section — save submission to Supabase
+    setSubmitting(true);
+    setSubmitError('');
+
+    const referenceNumber = generateReferenceNumber();
+
+    const { error } = await supabase.from('submissions').insert({
+      reference_number: referenceNumber,
+      form_id: formId ?? form.id,
+      form_title: form.title,
+      department: form.department,
+      form_data: formData,
+      status: 'received',
+    });
+
+    if (error) {
+      setSubmitError('There was a problem submitting your application. Please try again.');
+      setSubmitting(false);
+      return;
+    }
+
+    navigate('/confirmation', {
+      state: { referenceNumber, formTitle: form.title },
+    });
   };
   
   const handleBack = () => {
@@ -220,6 +246,12 @@ export function PublishedForm() {
             </div>
           </div>
           
+          {submitError && (
+            <div className="border-4 border-[#d4351c] p-4 mb-6" role="alert">
+              <p className="govuk-body font-bold">{submitError}</p>
+            </div>
+          )}
+
           {Object.keys(errors).length > 0 && (
             <div className="border-4 border-[#d4351c] p-4 mb-6" role="alert">
               <h2 className="govuk-heading-m flex items-center gap-2 mb-3">
@@ -267,8 +299,8 @@ export function PublishedForm() {
                   Continue
                 </Button>
               ) : (
-                <Button variant="primary" type="submit">
-                  Submit application
+                <Button variant="primary" type="submit" disabled={submitting}>
+                  {submitting ? 'Submitting...' : 'Submit application'}
                 </Button>
               )}
               

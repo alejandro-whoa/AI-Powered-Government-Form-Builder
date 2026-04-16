@@ -8,6 +8,7 @@ import { VersionManagement } from "./components/VersionManagement";
 import { PublishedForm } from "./components/PublishedForm";
 import { SubmissionConfirmation } from "./components/SubmissionConfirmation";
 import { ArchitectureView } from "./components/ArchitectureView";
+import { SubmissionTracking } from "./components/SubmissionTracking";
 import { NotFound } from "./components/NotFound";
 
 export const router = createBrowserRouter([
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
       { path: "form/:formId", Component: PublishedForm },
       { path: "confirmation", Component: SubmissionConfirmation },
       { path: "architecture", Component: ArchitectureView },
+      { path: "track", Component: SubmissionTracking },
       { path: "*", Component: NotFound },
     ],
   },
