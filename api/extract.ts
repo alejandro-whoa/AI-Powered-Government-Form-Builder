@@ -104,16 +104,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const rawText = completion.choices[0]?.message?.content ?? '';
 
+    // Log as error so it appears in Vercel's filtered log view
+    console.error('RAW MODEL RESPONSE:', rawText.slice(0, 1000));
+
     // Extract JSON by finding the outermost { } — works regardless of
     // whether the model wraps it in markdown fences or adds extra text
     const jsonStart = rawText.indexOf('{');
     const jsonEnd = rawText.lastIndexOf('}');
     if (jsonStart === -1 || jsonEnd === -1) {
+      console.error('NO JSON FOUND IN RESPONSE. Full text:', rawText.slice(0, 2000));
       throw new SyntaxError('No JSON found in model response');
     }
     const form = JSON.parse(rawText.slice(jsonStart, jsonEnd + 1));
     return res.status(200).json({ form });
   } catch (err) {
+    console.error('EXTRACT ERROR:', err instanceof Error ? err.message : err);
     const message =
       err instanceof SyntaxError
         ? 'The AI returned an unexpected response — please try again'
