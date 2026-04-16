@@ -15,7 +15,7 @@ const client = new OpenAI({
   apiKey: process.env.ANTHROPIC_API_KEY ?? '',
 });
 
-const MODEL = 'eu.anthropic.claude-sonnet-4-6';
+const MODEL = 'eu.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 function buildPrompt(title: string, department: string, now: string, pdfText: string): string {
   return `You are analysing text extracted from a government PDF form titled "${title}" from "${department}".
