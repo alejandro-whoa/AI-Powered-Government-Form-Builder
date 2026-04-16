@@ -103,12 +103,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const rawText = completion.choices[0]?.message?.content ?? '';
-    const cleaned = rawText
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim();
 
-    const form = JSON.parse(cleaned);
+    // Extract JSON by finding the outermost { } — works regardless of
+    // whether the model wraps it in markdown fences or adds extra text
+    const jsonStart = rawText.indexOf('{');
+    const jsonEnd = rawText.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new SyntaxError('No JSON found in model response');
+    }
+    const form = JSON.parse(rawText.slice(jsonStart, jsonEnd + 1));
     return res.status(200).json({ form });
   } catch (err) {
     const message =
