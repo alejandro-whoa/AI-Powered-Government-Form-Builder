@@ -1,4 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import pdfParse from 'pdf-parse';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Allow up to 6MB body — covers a ~4MB PDF after base64 encoding overhead
@@ -10,17 +11,30 @@ export const config = {
   },
 };
 
-const anthropic = new Anthropic();
+// LiteLLM exposes an OpenAI-compatible API.
+// We point the OpenAI SDK at the LiteLLM proxy instead of OpenAI's servers.
+const client = new OpenAI({
+  baseURL: process.env.LITELLM_BASE_URL ?? 'https://licenseportal.aiengineeringlab.co.uk/v1',
+  apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+});
 
-function buildPrompt(title: string, department: string, now: string): string {
-  return `Analyse this PDF government form and extract all form fields.
+// Best available model in the LiteLLM instance
+const MODEL = 'eu.anthropic.claude-sonnet-4-6';
 
-The form is titled "${title}" and belongs to "${department}".
+function buildPrompt(title: string, department: string, now: string, pdfText: string): string {
+  return `You are analysing the text extracted from a government PDF form titled "${title}" from "${department}".
 
-Return a single JSON object with this exact structure — no markdown fences, no extra text, only the JSON:
+Here is the extracted text from the PDF:
+---
+${pdfText.slice(0, 8000)}
+---
+
+Extract all form fields from this text and return a single JSON object. Return ONLY the JSON — no markdown fences, no explanations.
+
+The JSON must match this structure exactly:
 
 {
-  "id": "<kebab-case slug from the title>",
+  "id": "<kebab-case slug from the title, e.g. 'blue-badge-application'>",
   "title": "${title}",
   "description": "<one sentence describing the form's purpose>",
   "department": "${department}",
@@ -32,26 +46,26 @@ Return a single JSON object with this exact structure — no markdown fences, no
   },
   "sections": [
     {
-      "id": "<kebab-case>",
+      "id": "<kebab-case section id>",
       "title": "<section heading from the form>",
-      "description": "<brief description>",
+      "description": "<brief description of this section>",
       "order": 1
     }
   ],
   "fields": [
     {
-      "id": "<kebab-case>",
+      "id": "<kebab-case field id>",
       "type": "<one of: text | textarea | date | number | radio | checkbox | select | email | tel | postcode>",
       "label": "<exact label text from the form>",
-      "hint": "<hint text if present, otherwise omit>",
-      "options": [{ "label": "...", "value": "..." }],
+      "hint": "<hint or help text if present, otherwise omit this key>",
+      "options": [{ "label": "Option label", "value": "option-value" }],
       "validation": [
         { "type": "required", "message": "Enter <field label>" }
       ],
       "sectionId": "<matching section id>",
       "order": 1,
       "extracted": {
-        "confidence": 0.95,
+        "confidence": 0.92,
         "suggestedType": "<same as type>",
         "needsReview": false
       }
@@ -68,14 +82,14 @@ Return a single JSON object with this exact structure — no markdown fences, no
 }
 
 Rules:
-- Group fields logically into sections based on the form's visual layout
-- Confidence scoring: 0.90–0.98 for clearly legible fields, 0.75–0.89 for fields needing interpretation, below 0.75 for ambiguous or unclear fields
-- Set needsReview: true for any field with confidence below 0.75
-- Use GDS field types: postcode for postcodes, tel for phone numbers, date for date fields, email for email addresses
+- Group fields logically into sections based on the form's structure
+- Confidence: 0.90–0.98 for clearly readable fields, 0.75–0.89 for fields needing interpretation, below 0.75 for ambiguous fields
+- Set needsReview: true for confidence below 0.75
+- Use GDS-appropriate types: postcode for postcodes, tel for phone numbers, date for dates, email for email addresses
 - Include required validation on all mandatory fields
-- For radio, checkbox, and select fields, include all visible options
+- Include options array for radio, checkbox, and select fields
 - Set sourcePDF.extractionConfidence to the average confidence across all fields
-- Return ONLY the JSON object`;
+- Return ONLY the JSON object, nothing else`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -84,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured on this server' });
+    return res.status(500).json({ error: 'API key not configured on this server' });
   }
 
   const { pdf, title, department } = req.body as {
@@ -97,42 +111,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required fields: pdf, title, department' });
   }
 
-  const now = new Date().toISOString();
-
   try {
-    // Claude supports PDF documents natively via the document content type.
-    // The 'as any' cast is required because the SDK's TypeScript types lag
-    // slightly behind the API's supported content block types.
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    // Step 1: Extract text from the PDF using pdf-parse
+    const pdfBuffer = Buffer.from(pdf, 'base64');
+    const pdfData = await pdfParse(pdfBuffer);
+    const pdfText = pdfData.text;
+
+    if (!pdfText || pdfText.trim().length < 20) {
+      return res.status(422).json({
+        error: 'Could not extract text from this PDF. It may be a scanned image. Try a digitally-generated PDF.',
+      });
+    }
+
+    // Step 2: Send extracted text to Claude via LiteLLM
+    const now = new Date().toISOString();
+
+    const completion = await client.chat.completions.create({
+      model: MODEL,
       max_tokens: 4096,
-      system:
-        'You are a government form analysis assistant. You extract structured form data from PDFs and return it as JSON only. Never include markdown formatting in your response.',
       messages: [
         {
+          role: 'system',
+          content:
+            'You are a government form analysis assistant. You extract structured form data from text and return valid JSON only. Never include markdown formatting or explanations in your response.',
+        },
+        {
           role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: 'application/pdf',
-                data: pdf,
-              },
-            } as any,
-            {
-              type: 'text',
-              text: buildPrompt(title, department, now),
-            },
-          ],
+          content: buildPrompt(title, department, now, pdfText),
         },
       ],
     });
 
-    const rawText =
-      message.content[0].type === 'text' ? message.content[0].text : '';
+    const rawText = completion.choices[0]?.message?.content ?? '';
 
-    // Strip accidental markdown code fences if Claude adds them
+    // Strip any accidental markdown fences
     const cleaned = rawText
       .replace(/^```(?:json)?\s*/i, '')
       .replace(/\s*```$/, '')
@@ -144,7 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const errorMessage =
       err instanceof SyntaxError
-        ? 'Claude returned unexpected output — could not parse JSON'
+        ? 'The AI returned an unexpected response — please try again'
         : err instanceof Error
         ? err.message
         : 'Extraction failed';
