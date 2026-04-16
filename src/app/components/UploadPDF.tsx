@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Use the CDN-hosted worker so Vite doesn't need to bundle it
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 import { Button } from './gds/Button';
 import { Input } from './gds/Input';
 import { Upload, FileText, AlertCircle } from 'lucide-react';
@@ -58,19 +62,21 @@ export function UploadPDF() {
     setErrors({});
 
     try {
-      // Convert the PDF file to a base64 string for the API
+      // Extract text from the PDF in the browser before sending to the API.
+      // This avoids any serverless PDF-parsing issues entirely.
       const arrayBuffer = await selectedFile.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
+      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let pdfText = '';
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const page = await pdfDoc.getPage(i);
+        const content = await page.getTextContent();
+        pdfText += content.items.map((item: any) => item.str).join(' ') + '\n';
       }
-      const base64 = btoa(binary);
 
       const response = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf: base64, title: formTitle, department }),
+        body: JSON.stringify({ text: pdfText, title: formTitle, department }),
       });
 
       const data = await response.json();
