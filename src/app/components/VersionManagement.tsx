@@ -2,15 +2,41 @@ import { useNavigate, useParams } from 'react-router';
 import { Button } from './gds/Button';
 import { mockAuditLog, mockExtractedForm, mockPublishedForm } from '../data/mockData';
 import { Clock, User, FileText, CheckCircle2 } from 'lucide-react';
+import type { FormSchema } from '../types/schema';
+
+function loadForm(formId: string | undefined): FormSchema | null {
+  if (!formId) return null;
+  try {
+    const raw =
+      sessionStorage.getItem(`form-published-${formId}`) ??
+      sessionStorage.getItem(`form-${formId}`);
+    return raw ? (JSON.parse(raw) as FormSchema) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function VersionManagement() {
   const navigate = useNavigate();
   const { formId } = useParams();
-  
-  const versions = [
-    mockPublishedForm.version,
-    mockExtractedForm.version,
-  ];
+
+  const savedForm = loadForm(formId);
+  const isRealForm = !!savedForm;
+
+  const formTitle = savedForm?.title ?? 'Blue Badge Application';
+  const versions = savedForm
+    ? [savedForm.version]
+    : [mockPublishedForm.version, mockExtractedForm.version];
+  const auditLog = isRealForm && savedForm
+    ? [{
+        id: 'audit-001',
+        formId: savedForm.id,
+        version: savedForm.version.versionNumber,
+        action: savedForm.version.status === 'published' ? 'published' as const : 'created' as const,
+        user: savedForm.version.publishedBy ?? savedForm.version.createdBy,
+        timestamp: savedForm.version.publishedAt ?? savedForm.version.createdAt,
+      }]
+    : mockAuditLog;
   
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -29,7 +55,7 @@ export function VersionManagement() {
         <div className="govuk-grid-column-full">
           <span className="govuk-caption">Version management</span>
           <h1 className="govuk-heading-xl mb-6">
-            Blue Badge Application
+            {formTitle}
           </h1>
           
           <div className="mb-8">
@@ -157,7 +183,7 @@ export function VersionManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockAuditLog.map((entry) => (
+                  {auditLog.map((entry) => (
                     <tr key={entry.id} className="border-b border-[#b1b4b6]">
                       <td className="py-3 text-sm">
                         {formatDate(entry.timestamp)}

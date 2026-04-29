@@ -112,7 +112,7 @@ export function UploadPDF() {
             </p>
           </div>
           
-          {Object.keys(errors).length > 0 && (
+          {Object.values(errors).some(Boolean) && (
             <div className="border-4 border-[#d4351c] p-4 mb-6" role="alert">
               <h2 className="govuk-heading-m flex items-center gap-2 mb-3">
                 <AlertCircle className="w-6 h-6" />

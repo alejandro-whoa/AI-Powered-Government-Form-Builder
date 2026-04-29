@@ -10,6 +10,7 @@ import { SubmissionConfirmation } from "./components/SubmissionConfirmation";
 import { ArchitectureView } from "./components/ArchitectureView";
 import { SubmissionTracking } from "./components/SubmissionTracking";
 import { NotFound } from "./components/NotFound";
+import { Login } from "./components/Login";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: "confirmation", Component: SubmissionConfirmation },
       { path: "architecture", Component: ArchitectureView },
       { path: "track", Component: SubmissionTracking },
+      { path: "login", Component: Login },
       { path: "*", Component: NotFound },
     ],
   },

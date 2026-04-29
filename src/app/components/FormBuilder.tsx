@@ -1,18 +1,34 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useLocation } from 'react-router';
 import { Button } from './gds/Button';
 import { Input } from './gds/Input';
 import { Select } from './gds/Select';
 import { Checkbox } from './gds/Checkbox';
 import { mockExtractedForm } from '../data/mockData';
-import { FormField, FieldType } from '../types/schema';
+import { FormField, FormSchema, FieldType } from '../types/schema';
 import { Edit, Trash2, Plus, Save, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+
+function loadSavedForm(formId: string | undefined): FormSchema | null {
+  if (!formId) return null;
+  try {
+    const raw = sessionStorage.getItem(`form-${formId}`);
+    return raw ? (JSON.parse(raw) as FormSchema) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function FormBuilder() {
   const navigate = useNavigate();
   const { formId } = useParams();
-  
-  const [form, setForm] = useState(mockExtractedForm);
+  const location = useLocation();
+
+  const initialForm =
+    (location.state as { form?: FormSchema } | null)?.form ??
+    loadSavedForm(formId) ??
+    mockExtractedForm;
+
+  const [form, setForm] = useState(initialForm);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(form.sections.map(s => s.id))
   );
@@ -44,6 +60,21 @@ export function FormBuilder() {
   };
   
   const confirmPublish = () => {
+    const publishedForm: FormSchema = {
+      ...form,
+      version: {
+        ...form.version,
+        status: 'published',
+        versionNumber: form.version.versionNumber.replace('-draft', ''),
+        publishedAt: new Date().toISOString(),
+        publishedBy: 'caseworker',
+      },
+      fields: form.fields.map(({ extracted: _e, ...rest }) => rest),
+    };
+    if (formId) {
+      sessionStorage.setItem(`form-published-${formId}`, JSON.stringify(publishedForm));
+      sessionStorage.setItem(`form-${formId}`, JSON.stringify(publishedForm));
+    }
     navigate(`/versions/${formId}`);
   };
   

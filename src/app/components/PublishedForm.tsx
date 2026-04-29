@@ -16,7 +16,16 @@ export function PublishedForm() {
   const navigate = useNavigate();
   const { formId } = useParams();
   
-  const form = mockPublishedForm;
+  const form = (() => {
+    try {
+      const raw =
+        sessionStorage.getItem(`form-published-${formId}`) ??
+        sessionStorage.getItem(`form-${formId}`);
+      return raw ? JSON.parse(raw) : mockPublishedForm;
+    } catch {
+      return mockPublishedForm;
+    }
+  })();
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);

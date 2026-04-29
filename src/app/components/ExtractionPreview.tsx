@@ -175,9 +175,12 @@ export function ExtractionPreview() {
           </div>
           
           <div className="flex gap-4 mt-6">
-            <Button 
-              variant="primary" 
-              onClick={() => navigate(`/builder/${formId}`)}
+            <Button
+              variant="primary"
+              onClick={() => {
+                sessionStorage.setItem(`form-${formId}`, JSON.stringify(form));
+                navigate(`/builder/${formId}`);
+              }}
             >
               Continue to form builder
               <ArrowRight className="inline-block w-5 h-5 ml-2" />
