@@ -1,4 +1,4 @@
-import { next, redirect } from '@vercel/edge';
+import { next } from '@vercel/edge';
 
 export const config = {
   matcher: '/:path*',
@@ -35,5 +35,5 @@ export default function middleware(request: Request) {
     return next();
   }
 
-  return redirect(new URL('/login', request.url));
+  return Response.redirect(new URL('/login', request.url), 302);
 }
